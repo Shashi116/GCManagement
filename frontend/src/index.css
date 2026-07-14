@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#0a0a1a] text-white;
+    background-image:
+      radial-gradient(ellipse at 20% 20%, rgba(99,102,241,0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(139,92,246,0.12) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(59,130,246,0.08) 0%, transparent 70%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Glass card — primary surface */
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+  /* Slightly more opaque for modals / elevated surfaces */
+  .glass-md {
+    @apply bg-white/[0.08] backdrop-blur-2xl border border-white/[0.15] rounded-2xl;
+  }
+  /* Dark input fields */
+  .glass-input {
+    @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white
+           placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/60
+           focus:border-indigo-500/50 transition-all;
+  }
+  /* Primary action button */
+  .btn-primary {
+    @apply bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl
+           transition-all duration-200 active:scale-95;
+  }
+  /* Ghost button */
+  .btn-ghost {
+    @apply bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white
+           rounded-xl transition-all duration-200;
+  }
+  /* Section label */
+  .section-label {
+    @apply text-xs font-semibold text-white/30 uppercase tracking-widest;
+  }
+}
