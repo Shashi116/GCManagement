@@ -4,11 +4,29 @@ import api from '../api/axios';
 
 const STEPS = ['Admin Account', 'Gaming PCs', 'PS5 Rooms', 'UPI QR', 'Finish'];
 
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={copy}
+      className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 transition-all whitespace-nowrap">
+      {copied ? '✓' : 'Copy'}
+    </button>
+  );
+}
+
 export default function SetupWizard() {
   const navigate = useNavigate();
   const [step, setStep]       = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+
+  // credentials returned after setup — shown in final step
+  const [createdDevices, setCreatedDevices] = useState(null);
 
   const [adminName, setAdminName]         = useState('');
   const [adminUsername, setAdminUsername] = useState('');
@@ -45,14 +63,7 @@ export default function SetupWizard() {
   };
 
   const canAdvance = () => {
-    if (step === 1) {
-      return (
-        adminName.trim() &&
-        adminUsername.trim().length >= 3 &&
-        adminPassword.length >= 6 &&
-        adminPassword === confirmPass
-      );
-    }
+    if (step === 1) return adminName.trim() && adminUsername.trim().length >= 3 && adminPassword.length >= 6 && adminPassword === confirmPass;
     if (step === 2) return pcNames.every((n) => n.trim());
     return true;
   };
@@ -60,24 +71,84 @@ export default function SetupWizard() {
   const handleFinish = async () => {
     setLoading(true);
     setError('');
-    debugger;
     try {
       const devices = [
         ...pcNames.map((name) => ({ name, type: 'pc' })),
         ...ps5Rooms.map((r)   => ({ name: r.name, type: 'ps5', capacity: r.capacity })),
       ];
-      await api.post('/setup', {
-        name:     adminName,
-        username: adminUsername,
-        password: adminPassword,
-        devices,
+      const { data } = await api.post('/setup', {
+        name: adminName, username: adminUsername, password: adminPassword, devices,
       });
-      navigate('/login');
+      // Show credentials step
+      setCreatedDevices(data.data?.devices || []);
+      setStep(6);
     } catch (err) {
       setError(err.response?.data?.message || 'Setup failed. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
+
+  // ── Credentials screen (step 6) ───────────────────────────────────────────
+  if (step === 6) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-green-600/10 rounded-full blur-3xl" />
+        </div>
+        <div className="glass-md shadow-2xl shadow-black/50 w-full max-w-2xl relative p-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-green-500/20 border border-green-500/30 flex items-center justify-center text-xl">🎉</div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Setup Complete!</h2>
+              <p className="text-sm text-white/40">Save these credentials — each PC needs them to connect</p>
+            </div>
+          </div>
+
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-xs text-yellow-400 mb-5">
+            ⚠ These secrets are shown <strong>once only</strong> and cannot be recovered. Note them down or screenshot this page before continuing.
+          </div>
+
+          {createdDevices && createdDevices.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+              {createdDevices.map((d) => (
+                <div key={d._id} className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-4">
+                  <p className="font-semibold text-white text-sm mb-3">
+                    {d.type === 'ps5' ? '🎮' : '🖥️'} {d.name}
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/30 w-24 shrink-0">Device ID</span>
+                      <code className="flex-1 font-mono text-xs text-indigo-300 bg-black/20 px-2 py-1 rounded truncate">{d._id}</code>
+                      <CopyButton text={d._id} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/30 w-24 shrink-0">Secret</span>
+                      <code className="flex-1 font-mono text-xs text-green-300 bg-black/20 px-2 py-1 rounded truncate">{d.deviceSecret}</code>
+                      <CopyButton text={d.deviceSecret} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-white/30 text-sm text-center py-6">No devices were added during setup. Add them via Admin → Devices.</p>
+          )}
+
+          <div className="mt-5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-xs text-indigo-300 space-y-1">
+            <p className="font-semibold text-indigo-400">On each gaming PC:</p>
+            <p>1. Run <code className="bg-black/20 px-1 rounded">CafeAgent.exe</code></p>
+            <p>2. Enter Hub URL: <code className="bg-black/20 px-1 rounded">http://192.168.1.8:5000</code></p>
+            <p>3. Paste the Device ID and Secret for that PC → Save & Connect</p>
+          </div>
+
+          <button onClick={() => navigate('/login')} className="btn-primary w-full py-2.5 text-sm mt-5">
+            Go to Login →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -95,11 +166,9 @@ export default function SetupWizard() {
               <React.Fragment key={s}>
                 <div className="flex flex-col items-center gap-1 shrink-0">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    i + 1 < step
-                      ? 'bg-green-500/80 text-white'
-                      : i + 1 === step
-                      ? 'bg-indigo-600 text-white ring-4 ring-indigo-500/20'
-                      : 'bg-white/5 border border-white/10 text-white/30'
+                    i + 1 < step ? 'bg-green-500/80 text-white'
+                    : i + 1 === step ? 'bg-indigo-600 text-white ring-4 ring-indigo-500/20'
+                    : 'bg-white/5 border border-white/10 text-white/30'
                   }`}>
                     {i + 1 < step ? '✓' : i + 1}
                   </div>
@@ -116,7 +185,6 @@ export default function SetupWizard() {
         {/* Step content */}
         <div className="px-8 py-6 min-h-[320px]">
 
-          {/* Step 1: Admin Account */}
           {step === 1 && (
             <div className="space-y-4">
               <div>
@@ -125,8 +193,7 @@ export default function SetupWizard() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-white/40 mb-1">Your Name</label>
-                <input value={adminName} onChange={(e) => setAdminName(e.target.value)}
-                  placeholder="Café Owner Name" className="glass-input" />
+                <input value={adminName} onChange={(e) => setAdminName(e.target.value)} placeholder="Café Owner Name" className="glass-input" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-white/40 mb-1">Username (min 3 chars)</label>
@@ -136,8 +203,7 @@ export default function SetupWizard() {
               <div>
                 <label className="block text-xs font-medium text-white/40 mb-1">Password (min 6 chars)</label>
                 <div className="relative">
-                  <input type={showPass ? 'text' : 'password'} value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
+                  <input type={showPass ? 'text' : 'password'} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)}
                     placeholder="Set a strong password" className="glass-input pr-16" autoComplete="new-password" />
                   <button type="button" onClick={() => setShowPass((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30 hover:text-white/60 transition-colors">
@@ -150,14 +216,11 @@ export default function SetupWizard() {
                 <input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)}
                   placeholder="Re-enter password" className={`glass-input ${confirmPass && confirmPass !== adminPassword ? 'border-red-500/50' : ''}`}
                   autoComplete="new-password" />
-                {confirmPass && confirmPass !== adminPassword && (
-                  <p className="text-xs text-red-400 mt-1">Passwords do not match</p>
-                )}
+                {confirmPass && confirmPass !== adminPassword && <p className="text-xs text-red-400 mt-1">Passwords do not match</p>}
               </div>
             </div>
           )}
 
-          {/* Step 2: Gaming PCs */}
           {step === 2 && (
             <div className="space-y-4">
               <div>
@@ -167,8 +230,7 @@ export default function SetupWizard() {
               <div className="flex items-center gap-3">
                 <label className="text-xs font-medium text-white/40 shrink-0">Number of PCs</label>
                 <input type="number" min="1" max="30" value={pcCount}
-                  onChange={(e) => handlePcCountChange(Number(e.target.value))}
-                  className="w-20 glass-input" />
+                  onChange={(e) => handlePcCountChange(Number(e.target.value))} className="w-20 glass-input" />
               </div>
               <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
                 {pcNames.map((name, i) => (
@@ -180,7 +242,6 @@ export default function SetupWizard() {
             </div>
           )}
 
-          {/* Step 3: PS5 Rooms */}
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -193,28 +254,21 @@ export default function SetupWizard() {
                   + Add Room
                 </button>
               </div>
-              {ps5Rooms.length === 0 && (
-                <p className="text-sm text-white/20 text-center py-4">No PS5 rooms yet — click "+ Add Room"</p>
-              )}
+              {ps5Rooms.length === 0 && <p className="text-sm text-white/20 text-center py-4">No PS5 rooms — click "+ Add Room"</p>}
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {ps5Rooms.map((room, i) => (
                   <div key={i} className="flex gap-2 items-center">
-                    <input value={room.name} onChange={(e) => updatePs5Room(i, { name: e.target.value })}
-                      placeholder="Room name" className="flex-1 glass-input" />
-                    <input type="number" min="1" value={room.capacity}
-                      onChange={(e) => updatePs5Room(i, { capacity: Number(e.target.value) })}
+                    <input value={room.name} onChange={(e) => updatePs5Room(i, { name: e.target.value })} placeholder="Room name" className="flex-1 glass-input" />
+                    <input type="number" min="1" value={room.capacity} onChange={(e) => updatePs5Room(i, { capacity: Number(e.target.value) })}
                       title="Player capacity" className="w-16 glass-input text-center px-2" />
                     <button onClick={() => removePs5Room(i)}
-                      className="w-8 h-8 flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-lg leading-none">
-                      ×
-                    </button>
+                      className="w-8 h-8 flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-lg leading-none">×</button>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Step 4: UPI QR */}
           {step === 4 && (
             <div className="space-y-4">
               <div>
@@ -240,7 +294,6 @@ export default function SetupWizard() {
             </div>
           )}
 
-          {/* Step 5: Finish */}
           {step === 5 && (
             <div className="space-y-4">
               <div>
@@ -264,38 +317,28 @@ export default function SetupWizard() {
               <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-xs text-indigo-400">
                 PCs: {pcNames.join(', ')}
               </div>
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-xs text-red-400">
-                  {error}
-                </div>
-              )}
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-xs text-yellow-400">
+                ⚠ After finishing, device credentials will be shown <strong>once</strong>. Have a pen or phone ready to note them.
+              </div>
+              {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-xs text-red-400">{error}</div>}
             </div>
           )}
         </div>
 
         {/* Navigation */}
         <div className="px-8 pb-8 flex justify-between items-center border-t border-white/[0.06] pt-5">
-          <button
-            onClick={() => setStep((s) => s - 1)}
-            disabled={step === 1 || loading}
-            className="px-5 py-2 text-sm text-white/30 hover:text-white/60 disabled:opacity-20 transition-colors"
-          >
+          <button onClick={() => setStep((s) => s - 1)} disabled={step === 1 || loading}
+            className="px-5 py-2 text-sm text-white/30 hover:text-white/60 disabled:opacity-20 transition-colors">
             ← Back
           </button>
           {step < 5 ? (
-            <button
-              onClick={() => setStep((s) => s + 1)}
-              disabled={!canAdvance()}
-              className="btn-primary px-6 py-2.5 text-sm disabled:opacity-30"
-            >
+            <button onClick={() => setStep((s) => s + 1)} disabled={!canAdvance()}
+              className="btn-primary px-6 py-2.5 text-sm disabled:opacity-30">
               Next →
             </button>
           ) : (
-            <button
-              onClick={handleFinish}
-              disabled={loading}
-              className="bg-green-600/80 hover:bg-green-600 border border-green-500/40 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
-            >
+            <button onClick={handleFinish} disabled={loading}
+              className="bg-green-600/80 hover:bg-green-600 border border-green-500/40 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50">
               {loading ? 'Setting up…' : 'Finish Setup ✓'}
             </button>
           )}
