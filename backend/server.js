@@ -24,9 +24,14 @@ const app    = express();
 const server = http.createServer(app);
 
 // ── Socket.IO — initialized here, events wired in Stage 3 ────────────────────
+// Allow connections from localhost (dev) and any LAN IP (production)
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: ALLOWED_ORIGINS,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   },
 });
@@ -42,7 +47,7 @@ io.on('connection', (socket) => {
 });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
