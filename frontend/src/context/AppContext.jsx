@@ -36,7 +36,7 @@ export function AppProvider({ children }) {
     id:     d._id,
     label:  d.name,
     status: d.status.charAt(0).toUpperCase() + d.status.slice(1).replace('_', ' '),
-    type:   d.type === 'ps5' ? 'PS5' : 'PC',
+    type:   d.type.toUpperCase(),
   });
 
   const normaliseSession = (s) => ({

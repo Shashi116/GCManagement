@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
         const deviceSecretHash = await bcrypt.hash(deviceSecret, 10);
         const device = await Device.create({
           name:     d.name,
-          type:     d.type,
+          type:     (d.type || 'pc').trim().toLowerCase(),
           status:   'available',
           capacity: d.capacity || null,
           deviceSecretHash,

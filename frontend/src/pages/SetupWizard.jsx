@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
-const STEPS = ['Admin Account', 'Gaming PCs', 'PS5 Rooms', 'UPI QR', 'Finish'];
+const STEPS = ['Admin Account', 'Devices', 'UPI QR', 'Finish'];
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
@@ -19,41 +19,31 @@ function CopyButton({ text }) {
   );
 }
 
+const EMPTY_DEVICE = { name: '', type: 'pc', capacity: '' };
+
 export default function SetupWizard() {
   const navigate = useNavigate();
   const [step, setStep]       = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
-
-  // credentials returned after setup — shown in final step
   const [createdDevices, setCreatedDevices] = useState(null);
 
+  // Step 1 — admin
   const [adminName, setAdminName]         = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [confirmPass, setConfirmPass]     = useState('');
   const [showPass, setShowPass]           = useState(false);
 
-  const [pcCount, setPcCount] = useState(4);
-  const [pcNames, setPcNames] = useState(['PC 1', 'PC 2', 'PC 3', 'PC 4']);
+  // Step 2 — devices (generic list)
+  const [deviceList, setDeviceList] = useState([{ ...EMPTY_DEVICE, name: 'PC 1', type: 'pc' }]);
 
-  const [ps5Rooms, setPs5Rooms] = useState([{ name: 'PS5 Room 1', capacity: 2 }]);
+  const addDevice    = () => setDeviceList((p) => [...p, { ...EMPTY_DEVICE }]);
+  const removeDevice = (i) => setDeviceList((p) => p.filter((_, idx) => idx !== i));
+  const updateDevice = (i, patch) => setDeviceList((p) => p.map((d, idx) => idx === i ? { ...d, ...patch } : d));
+
+  // Step 3 — UPI QR
   const [qrPreview, setQrPreview] = useState(null);
-
-  const handlePcCountChange = (n) => {
-    const count = Math.max(1, Math.min(30, n));
-    setPcCount(count);
-    setPcNames((prev) => {
-      const next = [...prev];
-      while (next.length < count) next.push(`PC ${next.length + 1}`);
-      return next.slice(0, count);
-    });
-  };
-
-  const addPs5Room    = () => setPs5Rooms((p) => [...p, { name: `PS5 Room ${p.length + 1}`, capacity: 2 }]);
-  const removePs5Room = (i) => setPs5Rooms((p) => p.filter((_, idx) => idx !== i));
-  const updatePs5Room = (i, patch) => setPs5Rooms((p) => p.map((r, idx) => idx === i ? { ...r, ...patch } : r));
-
   const handleQrUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -63,8 +53,13 @@ export default function SetupWizard() {
   };
 
   const canAdvance = () => {
-    if (step === 1) return adminName.trim() && adminUsername.trim().length >= 3 && adminPassword.length >= 6 && adminPassword === confirmPass;
-    if (step === 2) return pcNames.every((n) => n.trim());
+    if (step === 1) return (
+      adminName.trim() &&
+      adminUsername.trim().length >= 3 &&
+      adminPassword.length >= 6 &&
+      adminPassword === confirmPass
+    );
+    if (step === 2) return deviceList.every((d) => d.name.trim() && d.type.trim());
     return true;
   };
 
@@ -72,16 +67,16 @@ export default function SetupWizard() {
     setLoading(true);
     setError('');
     try {
-      const devices = [
-        ...pcNames.map((name) => ({ name, type: 'pc' })),
-        ...ps5Rooms.map((r)   => ({ name: r.name, type: 'ps5', capacity: r.capacity })),
-      ];
+      const devices = deviceList.map((d) => ({
+        name:     d.name.trim(),
+        type:     d.type.trim().toLowerCase(),
+        capacity: d.capacity ? Number(d.capacity) : null,
+      }));
       const { data } = await api.post('/setup', {
         name: adminName, username: adminUsername, password: adminPassword, devices,
       });
-      // Show credentials step
       setCreatedDevices(data.data?.devices || []);
-      setStep(6);
+      setStep(5); // credentials screen
     } catch (err) {
       setError(err.response?.data?.message || 'Setup failed. Please try again.');
     } finally {
@@ -89,8 +84,8 @@ export default function SetupWizard() {
     }
   };
 
-  // ── Credentials screen (step 6) ───────────────────────────────────────────
-  if (step === 6) {
+  // Credentials screen
+  if (step === 5) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -101,20 +96,18 @@ export default function SetupWizard() {
             <div className="w-10 h-10 rounded-xl bg-green-500/20 border border-green-500/30 flex items-center justify-center text-xl">🎉</div>
             <div>
               <h2 className="text-xl font-bold text-white">Setup Complete!</h2>
-              <p className="text-sm text-white/40">Save these credentials — each PC needs them to connect</p>
+              <p className="text-sm text-white/40">Save these credentials — each device needs them to connect</p>
             </div>
           </div>
-
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-xs text-yellow-400 mb-5">
-            ⚠ These secrets are shown <strong>once only</strong> and cannot be recovered. Note them down or screenshot this page before continuing.
+            ⚠ These secrets are shown <strong>once only</strong> and cannot be recovered.
           </div>
-
           {createdDevices && createdDevices.length > 0 ? (
             <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
               {createdDevices.map((d) => (
                 <div key={d._id} className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-4">
-                  <p className="font-semibold text-white text-sm mb-3">
-                    {d.type === 'ps5' ? '🎮' : '🖥️'} {d.name}
+                  <p className="font-semibold text-white text-sm mb-3 uppercase tracking-wide">
+                    {d.type} · {d.name}
                   </p>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -132,16 +125,8 @@ export default function SetupWizard() {
               ))}
             </div>
           ) : (
-            <p className="text-white/30 text-sm text-center py-6">No devices were added during setup. Add them via Admin → Devices.</p>
+            <p className="text-white/30 text-sm text-center py-6">No devices added. Add them via Admin → Devices.</p>
           )}
-
-          <div className="mt-5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-xs text-indigo-300 space-y-1">
-            <p className="font-semibold text-indigo-400">On each gaming PC:</p>
-            <p>1. Run <code className="bg-black/20 px-1 rounded">CafeAgent.exe</code></p>
-            <p>2. Enter Hub URL: <code className="bg-black/20 px-1 rounded">http://192.168.1.8:5000</code></p>
-            <p>3. Paste the Device ID and Secret for that PC → Save & Connect</p>
-          </div>
-
           <button onClick={() => navigate('/login')} className="btn-primary w-full py-2.5 text-sm mt-5">
             Go to Login →
           </button>
@@ -185,6 +170,7 @@ export default function SetupWizard() {
         {/* Step content */}
         <div className="px-8 py-6 min-h-[320px]">
 
+          {/* Step 1: Admin Account */}
           {step === 1 && (
             <div className="space-y-4">
               <div>
@@ -214,62 +200,55 @@ export default function SetupWizard() {
               <div>
                 <label className="block text-xs font-medium text-white/40 mb-1">Confirm Password</label>
                 <input type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)}
-                  placeholder="Re-enter password" className={`glass-input ${confirmPass && confirmPass !== adminPassword ? 'border-red-500/50' : ''}`}
+                  placeholder="Re-enter password"
+                  className={`glass-input ${confirmPass && confirmPass !== adminPassword ? 'border-red-500/50' : ''}`}
                   autoComplete="new-password" />
                 {confirmPass && confirmPass !== adminPassword && <p className="text-xs text-red-400 mt-1">Passwords do not match</p>}
               </div>
             </div>
           )}
 
+          {/* Step 2: Devices — generic, any type */}
           {step === 2 && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-bold text-white">Add Gaming PCs</h2>
-                <p className="text-sm text-white/30 mt-0.5">Set count then rename each PC if needed</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-medium text-white/40 shrink-0">Number of PCs</label>
-                <input type="number" min="1" max="30" value={pcCount}
-                  onChange={(e) => handlePcCountChange(Number(e.target.value))} className="w-20 glass-input" />
-              </div>
-              <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
-                {pcNames.map((name, i) => (
-                  <input key={i} value={name}
-                    onChange={(e) => setPcNames((prev) => prev.map((n, idx) => idx === i ? e.target.value : n))}
-                    className="glass-input" />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Add PS5 Rooms</h2>
-                  <p className="text-sm text-white/30 mt-0.5">Name + player capacity per room</p>
+                  <h2 className="text-xl font-bold text-white">Add Devices</h2>
+                  <p className="text-sm text-white/30 mt-0.5">Any type — PC, PS5, VR, console, etc.</p>
                 </div>
-                <button onClick={addPs5Room}
+                <button onClick={addDevice}
                   className="text-sm text-indigo-400 hover:text-indigo-300 font-medium border border-indigo-500/30 px-3 py-1 rounded-lg bg-indigo-500/10 transition-all">
-                  + Add Room
+                  + Add
                 </button>
               </div>
-              {ps5Rooms.length === 0 && <p className="text-sm text-white/20 text-center py-4">No PS5 rooms — click "+ Add Room"</p>}
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {ps5Rooms.map((room, i) => (
+              {deviceList.length === 0 && (
+                <p className="text-sm text-white/20 text-center py-4">No devices — click "+ Add"</p>
+              )}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {deviceList.map((d, i) => (
                   <div key={i} className="flex gap-2 items-center">
-                    <input value={room.name} onChange={(e) => updatePs5Room(i, { name: e.target.value })} placeholder="Room name" className="flex-1 glass-input" />
-                    <input type="number" min="1" value={room.capacity} onChange={(e) => updatePs5Room(i, { capacity: Number(e.target.value) })}
-                      title="Player capacity" className="w-16 glass-input text-center px-2" />
-                    <button onClick={() => removePs5Room(i)}
-                      className="w-8 h-8 flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-lg leading-none">×</button>
+                    <input value={d.name} onChange={(e) => updateDevice(i, { name: e.target.value })}
+                      placeholder="Name (e.g. PC 1)" className="flex-1 glass-input" />
+                    <input value={d.type} onChange={(e) => updateDevice(i, { type: e.target.value })}
+                      placeholder="Type" className="w-20 glass-input" list="setup-types" />
+                    <datalist id="setup-types">
+                      {['pc', 'ps5', 'vr', 'console'].map((t) => <option key={t} value={t} />)}
+                    </datalist>
+                    <input type="number" min="1" value={d.capacity} onChange={(e) => updateDevice(i, { capacity: e.target.value })}
+                      placeholder="Cap" title="Capacity (optional)" className="w-14 glass-input text-center px-1" />
+                    <button onClick={() => removeDevice(i)}
+                      className="w-8 h-8 flex items-center justify-center text-red-400/50 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-lg leading-none">
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-white/20">Name · Type · Capacity (optional)</p>
             </div>
           )}
 
-          {step === 4 && (
+          {/* Step 3: UPI QR */}
+          {step === 3 && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold text-white">Upload UPI QR Code</h2>
@@ -294,7 +273,8 @@ export default function SetupWizard() {
             </div>
           )}
 
-          {step === 5 && (
+          {/* Step 4: Finish */}
+          {step === 4 && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold text-white">Ready to Go! 🎉</h2>
@@ -302,11 +282,10 @@ export default function SetupWizard() {
               </div>
               <div className="bg-white/[0.04] border border-white/[0.07] rounded-2xl p-4 space-y-3 text-sm">
                 {[
-                  ['Admin Name',  adminName || '—'],
-                  ['Username',    adminUsername || '—'],
-                  ['Gaming PCs',  `${pcNames.length} PCs`],
-                  ['PS5 Rooms',   `${ps5Rooms.length} room${ps5Rooms.length !== 1 ? 's' : ''}`],
-                  ['UPI QR',      qrPreview ? '✓ Uploaded' : 'Not set'],
+                  ['Admin Name', adminName || '—'],
+                  ['Username',   adminUsername || '—'],
+                  ['Devices',    `${deviceList.length} device${deviceList.length !== 1 ? 's' : ''}`],
+                  ['UPI QR',     qrPreview ? '✓ Uploaded' : 'Not set'],
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between">
                     <span className="text-white/30">{label}</span>
@@ -314,11 +293,13 @@ export default function SetupWizard() {
                   </div>
                 ))}
               </div>
-              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-xs text-indigo-400">
-                PCs: {pcNames.join(', ')}
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-xs text-indigo-400 space-y-0.5">
+                {deviceList.map((d, i) => (
+                  <p key={i}>{d.name} <span className="text-indigo-300/50 uppercase">{d.type}</span>{d.capacity ? ` · cap ${d.capacity}` : ''}</p>
+                ))}
               </div>
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-xs text-yellow-400">
-                ⚠ After finishing, device credentials will be shown <strong>once</strong>. Have a pen or phone ready to note them.
+                ⚠ After finishing, device credentials will be shown <strong>once</strong>. Have a pen or phone ready.
               </div>
               {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-xs text-red-400">{error}</div>}
             </div>
@@ -331,7 +312,7 @@ export default function SetupWizard() {
             className="px-5 py-2 text-sm text-white/30 hover:text-white/60 disabled:opacity-20 transition-colors">
             ← Back
           </button>
-          {step < 5 ? (
+          {step < 4 ? (
             <button onClick={() => setStep((s) => s + 1)} disabled={!canAdvance()}
               className="btn-primary px-6 py-2.5 text-sm disabled:opacity-30">
               Next →

@@ -135,10 +135,8 @@ export default function SessionCard({ session, device, onRefresh, notResponding 
         <div className="px-4 pt-4 pb-2 flex items-start justify-between">
           <div>
             <p className="font-semibold text-white text-sm">{device.label || device.name}</p>
-            <p className="text-xs text-white/30 mt-0.5">
-              {device.type === 'PS5' || device.type === 'ps5'
-                ? `PS5 · Cap: ${device.capacity}`
-                : 'Gaming PC'}
+            <p className="text-xs text-white/30 mt-0.5 uppercase tracking-wide">
+              {device.type}{device.capacity ? ` · Cap: ${device.capacity}` : ''}
             </p>
           </div>
           <StatusBadge state={sessionState} />

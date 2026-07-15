@@ -14,6 +14,16 @@ function emit(req, event, payload) {
 
 // ── Admin CRUD ────────────────────────────────────────────────────────────────
 
+// GET /api/devices/types — distinct device types in DB, for frontend datalist
+router.get('/types', authenticateToken, async (req, res) => {
+  try {
+    const types = await Device.distinct('type');
+    return res.json({ success: true, data: types.sort() });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/devices
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -30,18 +40,19 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     const { name, type, status, capacity } = req.body;
     if (!name || !type)
       return res.status(400).json({ success: false, message: 'name and type are required' });
-    if (!['pc', 'ps5'].includes(type))
-      return res.status(400).json({ success: false, message: 'type must be pc or ps5' });
 
-    // Generate a random 32-byte secret, return it plain ONCE, store only the hash
+    const normType = type.trim().toLowerCase();
+    if (!normType)
+      return res.status(400).json({ success: false, message: 'type cannot be empty' });
+
     const deviceSecret     = crypto.randomBytes(32).toString('hex');
     const deviceSecretHash = await bcrypt.hash(deviceSecret, 10);
 
     const device = await Device.create({
       name,
-      type,
-      status:           status || 'available',
-      capacity:         type === 'ps5' ? (capacity || 2) : null,
+      type:     normType,
+      status:   status || 'available',
+      capacity: capacity || null,
       deviceSecretHash,
     });
 
@@ -70,7 +81,7 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
     const { name, type, status, capacity } = req.body;
     const device = await Device.findByIdAndUpdate(
       req.params.id,
-      { name, type, status, capacity },
+      { name, type: type?.trim().toLowerCase(), status, capacity },
       { runValidators: true }
     );
     if (!device)
@@ -128,7 +139,7 @@ router.post('/authenticate', async (req, res) => {
     const token = jwt.sign(
       { deviceId: device._id.toString(), type: 'device' },
       process.env.JWT_DEVICE_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: process.env.JWT_DEVICE_EXPIRES_IN || '30d' }
     );
 
     await Device.findByIdAndUpdate(deviceId, { lastSeenAt: new Date() });
